@@ -15,10 +15,9 @@ import torch.multiprocessing as mp
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 
-
-from utils import config_logger, config_logger_handler, get_dist_info, set_seed, is_distributed
-from hooks import Hook
-from log_buffer import LogBuffer
+from .utils import config_logger, config_logger_handler, get_dist_info, set_seed, is_distributed
+from .hooks import Hook
+from .log_buffer import LogBuffer
 
 # (rank, world_size, device_id, num_epochs, vars)
 # (model, optimizer, lr_scheduler, train_data_loader, test_data_loaders)

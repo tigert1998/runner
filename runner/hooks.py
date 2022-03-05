@@ -4,7 +4,7 @@ import os.path as osp
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import is_distributed, master_only
+from .utils import is_distributed, master_only
 
 
 class Hook:
