@@ -50,7 +50,7 @@ def _single_process_train(
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = str(port)
     dist.init_process_group(
-        backend='nccl',
+        backend='gloo',
         init_method='env://',
         world_size=world_size,
         rank=rank,
