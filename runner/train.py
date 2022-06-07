@@ -3,6 +3,7 @@ import os
 import random
 import logging
 import os.path as osp
+from glob import glob
 import shutil
 from typing import Callable, List, Optional, Tuple, Dict, Union
 
@@ -108,6 +109,7 @@ class Runner:
     flow: str
     model: nn.Module
     optimizer: Optimizer
+    lr_scheduler: _LRScheduler
     outputs: dict
     log_buffer: LogBuffer
     hooks: List[Hook]
@@ -162,6 +164,34 @@ def _evaluate_outputs(runner: Runner, outputs):
         runner.log_buffer.output[var] = val
 
 
+def try_resume(runner: Runner):
+    if not osp.isdir(runner.work_dir):
+        return None, None
+    paths = glob(f"{runner.work_dir}/epoch_*.pth")
+    epochs = []
+    for path in paths:
+        try:
+            epoch = int(path[path.rfind("_") + 1: path.rfind(".")])
+            epochs.append(epoch)
+        except:
+            continue
+    epochs = sorted(epochs, reverse=True)
+    runner.logger.info(f"Found existing checkpoints: {epochs}")
+
+    model = runner.model.module if is_distributed() else runner.model
+    device = model.device
+
+    for epoch in epochs:
+        try:
+            ckpt = f"{runner.work_dir}/epoch_{epoch}.pth"
+            ckpt = torch.load(ckpt, map_location=device)
+        except:
+            continue
+        return epoch, ckpt
+
+    return None, None
+
+
 def train(
     model, work_dir,
     optimizer,
@@ -184,6 +214,7 @@ def train(
     runner.flow = None
     runner.model = model
     runner.optimizer = optimizer
+    runner.lr_scheduler = lr_scheduler
     runner.outputs = {}
     runner.log_buffer = LogBuffer()
     runner.hooks = hooks
@@ -191,13 +222,25 @@ def train(
     rank, _ = get_dist_info()
 
     runner.logger = config_logger("train", None)
+    if rank > 0:
+        runner.logger.handlers = []
+
+    epoch, ckpt = try_resume(runner)
+    resume = epoch is not None
+    if resume:
+        runner.iter = epoch * len(train_data_loader)
+        runner.epoch = epoch
+        model = runner.model.module if is_distributed() else runner.model
+        model.load_state_dict(ckpt["state_dict"])
+        runner.optimizer.load_state_dict(ckpt["optimizer"])
+        runner.lr_scheduler.load_state_dict(ckpt["lr_scheduler"])
+
     if rank == 0:
-        os.makedirs(work_dir)
+        if not resume:
+            os.makedirs(work_dir)
         handler = logging.FileHandler(osp.join(work_dir, "log.txt"))
         config_logger_handler(handler)
         runner.logger.handlers.append(handler)
-    else:
-        runner.logger.handlers = []
 
     runner.logger.info(f"Model Summary:\n{model}")
 
@@ -215,7 +258,7 @@ def train(
             _call_hook(runner, "before_train_iter")
             _run_iter(runner, True, data_batch)
             _call_hook(runner, "after_train_iter")
-            lr_scheduler.step()
+            runner.lr_scheduler.step()
             runner.inner_iter += 1
             runner.iter += 1
 

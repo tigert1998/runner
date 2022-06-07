@@ -112,8 +112,13 @@ class CheckpointHook(Hook):
     @master_only
     def after_train_epoch(self, runner):
         path = osp.join(runner.work_dir, f"epoch_{runner.epoch + 1}.pth")
+        model = runner.model.module if is_distributed() else runner.model
         torch.save(
-            runner.model.module.state_dict() if is_distributed() else runner.model.state_dict(),
+            {
+                "optimizer": runner.optimizer.state_dict(),
+                "lr_scheduler": runner.lr_scheduler.state_dict(),
+                "state_dict": model.state_dict(),
+            },
             path
         )
         if runner.epoch - 4 >= 1:
