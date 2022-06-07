@@ -237,7 +237,7 @@ def train(
 
     if rank == 0:
         if not resume:
-            os.makedirs(work_dir)
+            os.makedirs(work_dir, exist_ok=True)
         handler = logging.FileHandler(osp.join(work_dir, "log.txt"))
         config_logger_handler(handler)
         runner.logger.handlers.append(handler)
