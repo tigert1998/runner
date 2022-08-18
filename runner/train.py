@@ -1,5 +1,6 @@
 from datetime import timedelta
 import os
+import ctypes
 import random
 import logging
 import os.path as osp
@@ -69,8 +70,12 @@ def _single_process_train(
         output_device=device_id,
         find_unused_parameters=vars.get("find_unused_parameters", False)
     )
-    train(ddp_model, work_dir, optimizer, lr_scheduler,
-          num_epochs, train_data_loader, test_data_loaders, hooks)
+    train(
+        ddp_model, work_dir, optimizer, lr_scheduler,
+        num_epochs, train_data_loader, test_data_loaders, hooks,
+        cuda_limit_malloc_heap_size=vars.get(
+            "cuda_limit_malloc_heap_size", None)
+    )
 
 
 def dist_train(
@@ -197,12 +202,19 @@ def train(
     optimizer,
     lr_scheduler,
     num_epochs, train_data_loader, test_data_loaders,
-    hooks: List[Hook]
+    hooks: List[Hook],
+    cuda_limit_malloc_heap_size=None,
 ):
     if isinstance(test_data_loaders, DataLoader):
         test_data_loaders = {
             "default": test_data_loaders
         }
+
+    if cuda_limit_malloc_heap_size is not None:
+        assert 0 == ctypes.CDLL('libcudart.so').cudaDeviceSetLimit(
+            ctypes.c_int(2),
+            ctypes.c_size_t(cuda_limit_malloc_heap_size)
+        )
 
     runner = Runner()
     runner.work_dir = work_dir
